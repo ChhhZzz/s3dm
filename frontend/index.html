@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
+  <title>滑雪轨迹 3D 地形可视化</title>
+
+  <!-- Cesium CSS -->
+  <link rel="stylesheet" href="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Widgets/widgets.css">
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    #app {
+      position: relative;
+      display: flex;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* 展开菜单按钮 (默认隐藏，菜单收起时显示) */
+    #openSidebarBtn {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      width: 38px;
+      height: 38px;
+      cursor: pointer;
+      color: #fff;
+      background: rgba(22, 33, 62, 0.65);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(15, 52, 96, 0.6);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 999;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(-20px);
+    }
+
+    #openSidebarBtn:hover {
+      background: rgba(22, 33, 62, 0.85);
+      border-color: #e94560;
+    }
+
+    /* Sidebar - 毛玻璃效果 */
+    #sidebar {
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      width: 340px;
+      min-width: 340px;
+      background: rgba(22, 33, 62, 0.65);
+      /* 半透明背景 */
+      backdrop-filter: blur(15px);
+      /* 毛玻璃模糊 */
+      -webkit-backdrop-filter: blur(15px);
+      border-right: 1px solid rgba(15, 52, 96, 0.5);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      z-index: 1000;
+      color: #e0e0e0;
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    #sidebar::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    #sidebar::-webkit-scrollbar-thumb {
+      background: rgba(15, 52, 96, 0.8);
+      border-radius: 2px;
+    }
+
+    /* 菜单右上角的收起按钮 */
+    #closeSidebarBtn {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      width: 28px;
+      height: 28px;
+      cursor: pointer;
+      color: #e0e0e0;
+      background: rgba(15, 52, 96, 0.4);
+      border: 1px solid rgba(15, 52, 96, 0.6);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+
+    #closeSidebarBtn:hover {
+      background: rgba(233, 69, 96, 0.3);
+      border-color: #e94560;
+      color: #fff;
+    }
+
+    .sidebar-header {
+      font-size: 18px;
+      font-weight: 600;
+      color: #fff;
+      padding: 16px 20px 12px 20px;
+      border-bottom: 1px solid rgba(15, 52, 96, 0.5);
+      margin-bottom: 8px;
+      padding-right: 48px;
+      /* 给收起按钮留出空间 */
+    }
+
+    /* Panel */
+    .panel {
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(15, 52, 96, 0.3);
+    }
+
+    .panel-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #e94560;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .stat-item {
+      background: rgba(15, 52, 96, 0.25);
+      padding: 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(15, 52, 96, 0.4);
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: #a0aec0;
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: 16px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    /* Run List */
+    #runList {
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    #runList::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    #runList::-webkit-scrollbar-thumb {
+      background: rgba(15, 52, 96, 0.8);
+      border-radius: 2px;
+    }
+
+    .run-item {
+      display: flex;
+      align-items: center;
+      padding: 8px 10px;
+      margin-bottom: 6px;
+      background: rgba(15, 52, 96, 0.25);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: 1px solid transparent;
+    }
+
+    .run-item:hover {
+      background: rgba(15, 52, 96, 0.4);
+      border-color: rgba(233, 69, 96, 0.5);
+    }
+
+    .run-checkbox {
+      width: 16px;
+      height: 16px;
+      margin-right: 10px;
+      cursor: pointer;
+      accent-color: #e94560;
+    }
+
+    .run-color {
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+      margin-right: 10px;
+      flex-shrink: 0;
+    }
+
+    .run-name {
+      font-size: 13px;
+      color: #e0e0e0;
+      flex: 1;
+    }
+
+    /* Controls */
+    .control-group {
+      margin-bottom: 14px;
+    }
+
+    .control-group:last-child {
+      margin-bottom: 0;
+    }
+
+    .control-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .control-label {
+      font-size: 13px;
+      color: #cbd5e0;
+    }
+
+    .control-value {
+      font-size: 12px;
+      color: #e94560;
+      font-weight: 600;
+      min-width: 24px;
+      text-align: right;
+    }
+
+    /* Toggle Switch */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 22px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(15, 52, 96, 0.6);
+      transition: .3s;
+      border-radius: 22px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .3s;
+      border-radius: 50%;
+    }
+
+    input:checked+.slider {
+      background-color: #e94560;
+    }
+
+    input:checked+.slider:before {
+      transform: translateX(22px);
+    }
+
+    /* Range Slider */
+    input[type="range"] {
+      width: 100%;
+      height: 4px;
+      border-radius: 2px;
+      background: rgba(15, 52, 96, 0.6);
+      outline: none;
+      -webkit-appearance: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #e94560;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #e94560;
+      cursor: pointer;
+      border: none;
+    }
+
+    /* Buttons */
+    .btn-group {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .toggle-btn {
+      flex: 1;
+      padding: 8px 12px;
+      background: rgba(15, 52, 96, 0.4);
+      border: 1px solid rgba(15, 52, 96, 0.6);
+      border-radius: 4px;
+      color: #a0aec0;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .toggle-btn:hover {
+      background: rgba(15, 52, 96, 0.6);
+      color: #e0e0e0;
+    }
+
+    .toggle-btn.active {
+      background: rgba(233, 69, 96, 0.3);
+      border-color: #e94560;
+      color: #fff;
+    }
+
+    .action-btn {
+      width: 100%;
+      padding: 10px;
+      background: linear-gradient(135deg, #e94560 0%, #c73e54 100%);
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .action-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(233, 69, 96, 0.4);
+    }
+
+    /* Select Dropdown */
+    select {
+      width: 100%;
+      padding: 8px 12px;
+      background: rgba(15, 52, 96, 0.4);
+      border: 1px solid rgba(15, 52, 96, 0.6);
+      border-radius: 4px;
+      color: #e0e0e0;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    select option {
+      background: #1a1a2e;
+      color: #e0e0e0;
+    }
+
+    /* Cesium Container */
+    #cesiumContainer {
+      flex: 1;
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Info Panel */
+    #infoPanel {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: rgba(22, 33, 62, 0.75);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(15, 52, 96, 0.5);
+      border-radius: 8px;
+      padding: 12px 16px;
+      min-width: 180px;
+      z-index: 998;
+      transition: border-color 0.3s ease;
+    }
+
+    #infoPanel.fixed {
+      border-color: #e94560;
+      box-shadow: 0 0 0 2px rgba(233, 69, 96, 0.3);
+    }
+
+    .info-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #e94560;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+      font-size: 12px;
+    }
+
+    .info-label {
+      color: #a0aec0;
+    }
+
+    .info-value {
+      color: #fff;
+      font-weight: 500;
+      font-family: 'Courier New', monospace;
+    }
+
+    /* Legend Panel - 改为 fixed 定位，确保不受父容器影响 */
+    .legend-panel {
+      position: fixed;
+      /* 改为 fixed，相对于视口定位 */
+      bottom: 20px;
+      left: 360px;
+      /* 默认在菜单右侧 */
+      background: rgba(22, 33, 62, 0.75);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(15, 52, 96, 0.5);
+      border-radius: 8px;
+      padding: 12px 16px;
+      z-index: 998;
+      transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      /* 添加过渡动画 */
+    }
+
+    .legend-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: #e94560;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      margin-bottom: 6px;
+      font-size: 12px;
+    }
+
+    .legend-color {
+      width: 20px;
+      height: 4px;
+      border-radius: 2px;
+      margin-right: 8px;
+    }
+
+    .legend-label {
+      color: #e0e0e0;
+    }
+
+    /* Loading Overlay */
+    #loadingOverlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(26, 26, 46, 0.95);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+      color: #e0e0e0;
+      font-size: 14px;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(233, 69, 96, 0.3);
+      border-top-color: #e94560;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 16px;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* ====== 收起状态样式管理 (绑定在 body 上) ====== */
+    body.sidebar-collapsed #sidebar {
+      transform: translateX(-100%);
+    }
+
+    body.sidebar-collapsed #openSidebarBtn {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateX(0);
+    }
+
+    /* 保证全局捕获图例，不论它是否插在 #app 内部 */
+    body.sidebar-collapsed .legend-panel {
+      left: 20px;
+      /* 紧贴屏幕左下角 */
+    }
+  </style>
+</head>
+
+<body>
+  <div id="app">
+
+    <!-- 展开菜单按钮 -->
+    <div id="openSidebarBtn" title="展开菜单">
+      <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"
+        stroke-linecap="round" stroke-linejoin="round">
+        <line x1="3" y1="12" x2="21" y2="12"></line>
+        <line x1="3" y1="6" x2="21" y2="6"></line>
+        <line x1="3" y1="18" x2="21" y2="18"></line>
+      </svg>
+    </div>
+
+    <!-- Cesium 3D Map (置于最底层) -->
+    <div id="cesiumContainer"></div>
+
+    <!-- Sidebar -->
+    <div id="sidebar">
+
+      <!-- 收起菜单按钮 -->
+      <div id="closeSidebarBtn" title="收起菜单">
+        <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"
+          stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"></polyline>
+        </svg>
+      </div>
+
+      <div class="sidebar-header">滑雪轨迹 3D 地形可视化</div>
+
+      <!-- File Selection -->
+      <div class="panel">
+        <div class="panel-title">选择滑雪场</div>
+        <select id="fileSelect">
+          <option value="">-- 选择轨迹文件 --</option>
+        </select>
+      </div>
+
+      <!-- Statistics -->
+      <div class="panel">
+        <div class="panel-title">统计信息</div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <div class="stat-label">雪道数量</div>
+            <div class="stat-value" id="statRuns">-</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">总距离</div>
+            <div class="stat-value" id="statDistance">-</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">最高点</div>
+            <div class="stat-value" id="statMaxEle">-</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">最低点</div>
+            <div class="stat-value" id="statMinEle">-</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Run List -->
+      <div class="panel">
+        <div class="panel-title">
+          雪道列表
+          <span id="selectAllBtn">全选</span>
+        </div>
+        <div id="runList"></div>
+      </div>
+
+      <!-- Display Controls -->
+      <div class="panel">
+        <div class="panel-title">显示控制</div>
+        <div class="control-group">
+          <div class="control-row">
+            <span class="control-label">着色模式</span>
+            <select id="colorModeSelect"
+              style="background: rgba(26, 26, 46, 0.5); color: #e0e0e0; border: 1px solid rgba(15, 52, 96, 0.6); border-radius: 4px; padding: 4px 8px; font-size: 12px;">
+              <option value="slope" selected style="background: #1a1a2e;">坡度着色</option>
+              <option value="speed" style="background: #1a1a2e;">速度着色</option>
+              <option value="track" style="background: #1a1a2e;">轨迹着色</option>
+            </select>
+          </div>
+          <div class="control-row" style="margin-top: 8px;">
+            <span class="control-label">贴地地形</span>
+            <label class="switch">
+              <input type="checkbox" id="terrainSnapToggle">
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="control-row">
+            <span class="control-label">贴地坡度</span>
+            <label class="switch">
+              <input type="checkbox" id="terrainSlopeToggle">
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+        <div class="control-group">
+          <div class="control-row">
+            <span class="control-label">坡度间隔点</span>
+            <span class="control-value" id="slopeIntervalValue">0</span>
+          </div>
+          <input type="range" id="slopeIntervalSlider" min="0" max="10" value="0" title="间隔点数越多，坡度计算越平滑，适合S弯轨迹">
+          <div class="control-row" style="margin-top: 8px;">
+            <span class="control-label">显示平滑线</span>
+            <label class="switch">
+              <input type="checkbox" id="smoothLineToggle">
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+        <div class="control-group">
+          <div class="control-row">
+            <span class="control-label">轨迹宽度</span>
+            <span class="control-value" id="widthValue">4</span>
+          </div>
+          <input type="range" id="widthSlider" min="1" max="10" value="4">
+        </div>
+        <div class="btn-group">
+          <button class="toggle-btn" id="btnTerrain">地形</button>
+          <button class="toggle-btn" id="btnLighting">光照</button>
+          <button class="toggle-btn" id="btnWater">水体</button>
+        </div>
+      </div>
+
+      <!-- Camera Controls -->
+      <div class="panel">
+        <div class="panel-title">视角控制</div>
+        <button class="action-btn" id="btnFlyTo">飞到滑雪场</button>
+        <button class="action-btn" id="btnReset" style="margin-top: 8px;">重置视角</button>
+      </div>
+    </div>
+
+    <!-- Info Panel -->
+    <div id="infoPanel">
+      <div class="info-title">轨迹点信息</div>
+      <div class="info-row"><span class="info-label">经度:</span><span class="info-value" id="infoLon">-</span></div>
+      <div class="info-row"><span class="info-label">纬度:</span><span class="info-value" id="infoLat">-</span></div>
+      <div class="info-row"><span class="info-label">海拔:</span><span class="info-value" id="infoEle">-</span></div>
+      <div class="info-row"><span class="info-label">坡度:</span><span class="info-value" id="infoSlope">-</span></div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay">
+      <div class="spinner"></div>
+      <div>正在加载 3D 地形...</div>
+    </div>
+  </div>
+
+  <!-- Cesium JS -->
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Cesium.js"></script>
+
+  <!-- Application Scripts -->
+  <script src="config.js"></script>
+  <script src="cesium-app.js"></script>
+
+  <!-- 菜单展开/收起控制脚本 -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const closeBtn = document.getElementById('closeSidebarBtn');
+      const openBtn = document.getElementById('openSidebarBtn');
+
+      // 注意：现在是将 class 加在 document.body 上
+      // 这样可以确保覆盖页面上任意层级里的 .legend-panel
+
+      // 收起菜单
+      closeBtn.addEventListener('click', () => {
+        document.body.classList.add('sidebar-collapsed');
+      });
+
+      // 展开菜单
+      openBtn.addEventListener('click', () => {
+        document.body.classList.remove('sidebar-collapsed');
+      });
+    });
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: ski3dmap-backend
+    env: python
+    buildCommand: pip install -r other/requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+    disk:
+      name: tracks-data
+      mountPath: /opt/render/project/src/tracks
+      sizeGB: 1
